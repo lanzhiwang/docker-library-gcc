@@ -5,6 +5,7 @@
 #
 
 FROM buildpack-deps:bookworm
+# [1/5] FROM docker.io/library/buildpack-deps:bookworm@sha256:08d61da2eb4b661e95088f6999704803985f9bd7be23b3c5d7acce26cd2d521b
 
 RUN set -eux; \
 	apt-get update; \
@@ -13,6 +14,11 @@ RUN set -eux; \
 		abigail-tools \
 	; \
 	rm -rf /var/lib/apt/lists/*
+# [2/5] RUN
+# set -eux;
+# apt-get update;
+# apt-get install -y --no-install-recommends abigail-tools;
+# rm -rf /var/lib/apt/lists/*
 
 # https://gcc.gnu.org/mirrors.html
 ENV GPG_KEYS \
@@ -137,6 +143,66 @@ RUN set -ex; \
 	apt-mark auto '.*' > /dev/null; \
 	[ -z "$savedAptMark" ] || apt-mark manual $savedAptMark; \
 	apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false
+# [3/5] RUN
+# set -ex;
+# savedAptMark="$(apt-mark showmanual)";
+# apt-get update;
+# apt-get install -y --no-install-recommends dpkg-dev flex gnupg;
+# rm -r /var/lib/apt/lists/*;
+# _fetch() {
+# 	local fetch="$1"; shift;
+# 	local file="$1"; shift;
+# 	for mirror in https://ftpmirror.gnu.org/gcc https://mirrors.kernel.org/gnu/gcc https://bigsearcher.com/mirrors/gcc/releases http://www.netgull.com/gcc/releases https://ftpmirror.gnu.org/gcc https://sourceware.org/pub/gcc/releases ftp://ftp.gnu.org/gnu/gcc; do
+# 		if curl -fL "$mirror/$fetch" -o "$file"; then
+# 			return 0;
+# 		fi;
+# 	done;
+# 	echo >&2 "error: failed to download '$fetch' from several mirrors";
+# 	return 1;
+# };
+# _fetch "gcc-14.2.0/gcc-14.2.0.tar.xz.sig" 'gcc.tar.xz.sig';
+# _fetch "gcc-14.2.0/gcc-14.2.0.tar.xz" 'gcc.tar.xz';
+# export GNUPGHOME="$(mktemp -d)";
+# for key in B215C1633BCA0477615F1B35A5B3A004745C015A B3C42148A44E6983B3E4CC0793FA9B1AB75C61B8 90AA470469D3965A87A5DCB494D03953902C9419 80F98B2E0DAB6C8281BDF541A7C8C3B2F71EDF1C 7F74F97C103468EE5D750B583AB00996FC26A641 33C235A34C46AA3FFB293709A328C3A2C3C45C06 D3A93CAD751C2AF4F8C7AD516C35B99309B5FA62; do
+# 	gpg --batch --keyserver keyserver.ubuntu.com --recv-keys "$key";
+# done;
+# gpg --batch --verify gcc.tar.xz.sig gcc.tar.xz;
+# gpgconf --kill all;
+# rm -rf "$GNUPGHOME";
+# mkdir -p /usr/src/gcc;
+# tar -xf gcc.tar.xz -C /usr/src/gcc --strip-components=1;
+# rm gcc.tar.xz*;
+# cd /usr/src/gcc;
+# ./contrib/download_prerequisites;
+# { rm *.tar.* || true; };
+# for f in config.guess config.sub; do
+# 	wget -O "$f" "https://git.savannah.gnu.org/cgit/config.git/plain/$f?id=7d3d27baf8107b630586c962c057e22149653deb";
+# 	find -mindepth 2 -name "$f" -exec cp -v "$f" '{}' ';';
+# done;
+# dir="$(mktemp -d)";
+# cd "$dir";
+# extraConfigureArgs='';
+# dpkgArch="$(dpkg --print-architecture)";
+# case "$dpkgArch" in
+# 	armel)
+# 		extraConfigureArgs="$extraConfigureArgs --with-arch=armv5te --with-float=soft"
+# 		;;
+# 	armhf)
+# 		extraConfigureArgs="$extraConfigureArgs --with-arch=armv7-a+fp --with-float=hard --with-mode=thumb"
+# 		;;
+# 	i386)
+# 		extraConfigureArgs="$extraConfigureArgs --with-arch-32=i686";
+# 		;;
+# esac;
+# gnuArch="$(dpkg-architecture --query DEB_BUILD_GNU_TYPE)";
+# /usr/src/gcc/configure --build="$gnuArch" --disable-multilib --enable-languages=c,c++,fortran,go $extraConfigureArgs;
+# make -j "$(nproc)";
+# make install-strip;
+# cd ..;
+# rm -rf "$dir" /usr/src/gcc;
+# apt-mark auto '.*' > /dev/null;
+# [ -z "$savedAptMark" ] || apt-mark manual $savedAptMark;
+# apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false
 
 # gcc installs .so files in /usr/local/lib64 (and /usr/local/lib)...
 RUN set -ex; \
@@ -149,6 +215,13 @@ RUN set -ex; \
 	gcc="$(readlink -ve /usr/local/lib*/libstdc++.so | head -1)"; \
 # using LD_PRELOAD to make sure "abidiff" itself doesn't fail with the exact error we're trying to test for 😂😭
 	LD_PRELOAD="$deb" abidiff --no-added-syms "$deb" "$gcc"
+# [4/5] RUN
+# set -ex;
+# { echo '/usr/local/lib64'; echo '/usr/local/lib'; } > /etc/ld.so.conf.d/000-local-lib.conf;
+# ldconfig -v;
+# deb="$(readlink -ve /usr/lib/*/libstdc++.so* | head -1)";
+# gcc="$(readlink -ve /usr/local/lib*/libstdc++.so | head -1)";
+# LD_PRELOAD="$deb" abidiff --no-added-syms "$deb" "$gcc"
 
 # ensure that alternatives are pointing to the new compiler and that old one is no longer used
 RUN set -ex; \
@@ -156,3 +229,9 @@ RUN set -ex; \
 	dpkg-divert --divert /usr/bin/g++.orig --rename /usr/bin/g++; \
 	dpkg-divert --divert /usr/bin/gfortran.orig --rename /usr/bin/gfortran; \
 	update-alternatives --install /usr/bin/cc cc /usr/local/bin/gcc 999
+# [5/5] RUN
+# set -ex;
+# dpkg-divert --divert /usr/bin/gcc.orig --rename /usr/bin/gcc;
+# dpkg-divert --divert /usr/bin/g++.orig --rename /usr/bin/g++;
+# dpkg-divert --divert /usr/bin/gfortran.orig --rename /usr/bin/gfortran;
+# update-alternatives --install /usr/bin/cc cc /usr/local/bin/gcc 999
